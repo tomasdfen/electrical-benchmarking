@@ -54,12 +54,18 @@ def open_main_window(path):
                 [sg.CalendarButton("Fecha de fin", target='-END-', format="%d-%m-%Y", locale="ES"), sg.Input(key="-END-", enable_events=True)],
                 [sg.Text("Ventana de pasos hacia atras"), sg.Input("1", key='-BACK-')],
                 [sg.Text("Horizonte de predicción"), sg.Input("1", key='-FORWARD-')],
+                [sg.Text("Iteraciones"), sg.Input("1", key='-ITER-')],
+                [sg.Text("Batch de entrenamiento"), sg.Input("1", key='-TRAIN_BATCH-')],
+                [sg.Text("Batch de test"), sg.Input("1", key='-TEST_BATCH-')],
                 [sg.Button("OK", key="-GO-")]]
 
         errors = {
             "-START-":False,
             "-END-":False,
             "-BACK-":False,
+            "-ITER-":False,
+            "-TRAIN_BATCH-":False,
+            "-TEST_BATCH-":False,
             "-FORDWARD-":False
         }
         
@@ -97,6 +103,34 @@ def open_main_window(path):
             else:
                 window['-END-'].update(background_color="#FFFFFF")
                 errors['-END-'] = False
+                
+        if event == "-TEST_BATCH-":
+            if not isInt(values['-TEST_BATCH-']):
+                window['-TEST_BATCH-'].update(background_color="#FF0000")
+                errors['-TEST_BATCH-'] = True
+
+            else:
+                window['-TEST_BATCH-'].update(background_color="#FFFFFF")
+                errors['-TEST_BATCH-'] = False
+
+        if event == "-ITER-":
+            if not isInt(values['-ITER-']):
+                window['-ITER-'].update(background_color="#FF0000")
+                errors['-ITER-'] = True
+
+            else:
+                window['-ITER-'].update(background_color="#FFFFFF")
+                errors['-ITER-'] = False
+
+        if event == "-TRAIN_BATCH-":
+            if not isInt(values['-TRAIN_BATCH-']):
+                window['-TRAIN_BATCH-'].update(background_color="#FF0000")
+                errors['-TRAIN_BATCH-'] = True
+
+            else:
+                window['-TRAIN_BATCH-'].update(background_color="#FFFFFF")
+                errors['-TRAIN_BATCH-'] = False
+
         if event == "-BACK-":
             if not isInt(values['-BACK-']):
                 window['-BACK-'].update(background_color="#FF0000")
@@ -127,7 +161,7 @@ def open_main_window(path):
             foo.dropna(inplace=True)
             print(foo)      
                 
-                    
+            
         
     window.close()
 
