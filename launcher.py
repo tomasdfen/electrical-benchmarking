@@ -115,7 +115,6 @@ def submit_params():
     backs = []
     backtypes = []
     transformations = []
-    print(selectedvars)
     for i in range(len(selectedvars)):
         backs.append(request.form.get(f"{i}-back"))
         backtypes.append(request.form.get(f"{i}-backtype"))
@@ -145,7 +144,6 @@ def train(model_code):
     global performances
     global img_paths
     global m_code
-    print(f"Entrando en entrenamiento con codigo: {model_code}")
     m_code = model_code
 
     x_data = pd.DataFrame()
@@ -184,10 +182,8 @@ def train(model_code):
         x_batch = x_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][:-(cache.get("forward"))]
         y_batch = y_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][cache.get("forward"):]
         batches.append((x_batch, y_batch))
-    print(list(map(lambda x: f"{x[0].shape} vs {x[1].shape}", batches)))
 
     for model_id in model_code.split("_"):
-        print(model_id)
         res = []
         params = {}
         img_paths = []
@@ -258,9 +254,7 @@ def train(model_code):
             with open(os.path.join(model_path, "checkpoint.model"), 'wb') as f:
                 pickle.dump(model, f)
 
-            
-        print(f"Mean Performance (MSE) {np.mean(performances_mse)}")
-        print(f"Mean Performance (MAE) {np.mean(performances_mae)}")
+
         cache.set(f"img_path_{model_id}", img_paths)
         cache.set(f"performance_mse_{model_id}", performances_mse)
         cache.set(f"performance_mae_{model_id}", performances_mae)
@@ -272,7 +266,6 @@ def train(model_code):
 
 @app.route("/results")
 def results():
-    print(m_code)
     keys=[]
     for model_id in m_code.split("_"):
         keys.append(f"img_path_{model_id}")
@@ -286,7 +279,6 @@ def results():
     
 @app.route("/downloadPerformance/<model>")
 def downloadPerformance(model):
-    print(model)
     path = os.path.join("static",str(datetime.today().date()), f"performances-{model}.log")
     with open(path, "w+") as f:
             f.write(f"Resultados del entrenamiento con fecha: {datetime.now()}\n")
@@ -305,10 +297,7 @@ def downloadPerformance(model):
 
 @app.route("/downloadPreds/<model>")
 def downloadPreds(model):
-    print(model)
     path = os.path.join("static",str(datetime.today().date()), f"preds_{model}.csv")
-    print(cache.get("forward"))
-    print(cache.get(f"preds_{model}"))
     aux = pd.DataFrame(cache.get(f"preds_{model}"), columns = [f"{cache.get('target')}+{i+cache.get('forward')}" if i+cache.get('forward') > 0 else cache.get('target') for i in range(cache.get("step"))])
     aux.to_csv(path, index=False)
     r = make_response(path)
