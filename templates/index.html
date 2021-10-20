@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block header %} Importación de datos {% endblock %}
+
+{% block body %}
+
+<div class="position-relative m-4">
+  <div class="progress" style="height: 1px;">
+    <div class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
+      aria-valuemax="100"></div>
+  </div>
+  <button type="button" class="position-absolute top-0 start-0 translate-middle btn btn-sm btn-primary rounded-pill"
+    style="width: 2rem; height:2rem;">1</button>
+  <button type="button" class="position-absolute top-0 start-50 translate-middle btn btn-sm btn-secondary rounded-pill"
+    style="width: 2rem; height:2rem;">2</button>
+  <button type="button" class="position-absolute top-0 start-100 translate-middle btn btn-sm btn-secondary rounded-pill"
+    style="width: 2rem; height:2rem;">3</button>
+</div>
+<form class="px-4" action="/load_dataset" method="post" enctype=multipart/form-data>
+  <div class="mb-3">
+    <label class="form-label" for="dataset">Subida de datos</label>
+    <input type="file" class="form-control" id="dataset" name="dataset" />
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="format">Formato de la fecha</label>
+    <input type="text" class="form-control" id="format" name="format" value="%d-%m-%Y">
+  </div>
+  <div>
+    <label class="form-label mr-5" for="dataset">Formato del dataset</label>
+
+  </div>
+  <div class="mb-3">
+    <label class="form-check-label" for="xlsx-varioussheet">Excel (variables en hojas)</label>
+    <input type="radio" class="form-check-input" checked name="extension" id="xlsx-varioussheet" value="xlsx-varioussheet">
+    <label class="form-check-label" for="xlsx-onesheet">Excel (variables en una hoja)</label>
+    <input type="radio" class="form-check-input" name="extension" id="xlsx-onesheet" value="xlsx-onesheet" disabled>
+    <label class="form-check-label" for="csv">CSV</label>
+    <input type="radio" class="form-check-input" name="extension" id="csv" value="csv" disabled>
+  </div>
+  <input class="mt-3 btn btn-primary" type="submit">
+</form>
+
+{{error}}
+<script>
+
+</script>
+{% endblock %}

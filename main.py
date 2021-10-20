@@ -35,27 +35,31 @@ def open_main_window(path):
     while len(data.values()) == 0:
         load.read(timeout=1)
         print("Esperando")
-        data : dict = pd.read_excel(path, index_col=0, parse_dates=True, sheet_name=None)
-        for k in data.keys():
-            data[k].index = data[k].index.tz_localize('UTC').tz_convert("ETC/GMT-2").tz_localize(None)
+        if os.path.splitext(path)[1] == ".csv":
+            data = pd.read_csv(path, index_col=0, parse_dates=True)
+            data.index = data.index.tz_localize('UTC').tz_convert("ETC/GMT-2").tz_localize(None)
+            vars = data.columns
+        else:
+            data = pd.read_excel(path, index_col=0, parse_dates=True, sheet_name=None)
+            vars = data.keys()
+            for k in vars:
+                data[k].index = data[k].index.tz_localize('UTC').tz_convert("ETC/GMT-2").tz_localize(None)
 
     load.close()
                      
     left = [[sg.Text("Variables a usar", key="new")],
-            [sg.Listbox(list(data.keys()), select_mode=sg.LISTBOX_SELECT_MODE_MULTIPLE, size=(None, 100),enable_events=True, key="-LIST-")]]
+            [sg.Listbox(list(vars), select_mode=sg.LISTBOX_SELECT_MODE_MULTIPLE, size=(None, 100),enable_events=True, key="-LIST-")]]
 
     right = [[sg.CalendarButton("Fecha de inicio", target='-START-', format="%d-%m-%Y", locale="ES"), sg.Input("01-06-2020",key="-START-", enable_events=True)],
             [sg.CalendarButton("Fecha de fin", target='-END-', format="%d-%m-%Y", locale="ES"), sg.Input("31-08-2020", key="-END-", enable_events=True)],
-            [sg.Text("Variable objetivo"), sg.Combo(list(data.keys()),enable_events=True, key="-TARGET-")],
-            [sg.Text("Ventana de pasos hacia atras")],
-            [sg.Radio("Continuo", "backtype", key="-CONTINOUS-", default=True),sg.Radio("Selectivo", "backtype", key="-SELECTIVE-", default=False)],
-            [sg.Input("36", key='-BACK-')],
+            [sg.Text("Variable objetivo"), sg.Combo(list(vars),default_value=list(vars)[0], enable_events=True, key="-TARGET-")],
             [sg.Text("Horizonte de predicción"), sg.Input("6", key='-FORWARD-')],
-            [sg.Text("Avance por iteración"), sg.Input("48", key='-STEP-')],
+            [sg.Text("Avance por iteración"), sg.Input("8", key='-STEP-')],
             [sg.Text("Iteraciones"), sg.Input("15", key='-ITER-')],
             [sg.Check("Aprendizaje incremental", key='-INCREMENTAL-')],
             [sg.Text("Modelo"),sg.Radio("XGBoost", "models", key="-XGBOOST-", default=True),sg.Radio("SVM", "models", key="-SVM-", default=False)],
-            [sg.Button("OK", key="-GO-")]]
+            [sg.Button("OK", key="-GO-")],
+            [sg.Text("En la siguiente ventana podrá seleccionar \nparámetros para el modelo seleccionado y la \ndivisión temporal de las variables a usar", justification="left")]]
 
     errors = {
         "-START-":False,
@@ -154,89 +158,108 @@ def open_main_window(path):
     window.close()
 
 def choose_params(values, data, path):
+    left = []
+    for var in values['-LIST-']:
+        left.append([sg.Text(var)])
+        left.append([sg.Radio("Continuo", f"{var}-backtype", key=f"{var}-CONTINOUS-", default=True),sg.Radio("Selectivo", f"{var}-backtype", key=f"{var}-SELECTIVE-", default=False), sg.Input("36", key=f'{var}-BACK-')])
+    left.append([sg.Button("+", key="-EXTRA-")])
     if values["-XGBOOST-"]:
         objectives = ["reg:squarederror", "reg:squaredlogerror", "reg:logistic", "reg:pseudohubererror"]
-        layout = [[sg.Text("Función objetivo"), sg.Combo(objectives,default_value=objectives[0], enable_events=True, key="objective")],
+        right = [[sg.Text("Función objetivo"), sg.Combo(objectives,default_value=objectives[0], enable_events=True, key="objective")],
                   [sg.Text("Puntuación inicial"), sg.Slider((0,1),default_value=0.5, orientation="horizontal",resolution=0.1, enable_events=True, key="base_score")],
                   [sg.Input(r"C:\Users\tomasdfen\Downloads\test",key="-SAVE-",enable_events=True), sg.FolderBrowse()],
                   [sg.Button("OK", key="-GO-")]] 
+        layout = [[sg.Column(left), sg.VSeparator(), sg.Column(right)]]
         window = sg.Window("Selección de parámetros: XGBoost", layout, modal=True, size=(None, None))
         while True:
-                event, params = window.read()
-                if event == "Exit" or event == sg.WIN_CLOSED:
-                    break
-                if event == "-GO-":
-                    values['-START-'] = datetime.strptime(values['-START-'],"%d-%m-%Y")
-                    values['-END-'] = datetime.strptime(values['-END-'],"%d-%m-%Y")
-                    values["-FORWARD-"] = int(values["-FORWARD-"])
-                    values["-STEP-"] = int(values["-STEP-"])
-                    values["-ITER-"] = int(values["-ITER-"])
-                    path_to_save = params["-SAVE-"]
-                    x_data = pd.DataFrame()
-                    for var in values['-LIST-']:
-                        fstcol_name = data[var].columns[0]
-                        fstcol = data[var][fstcol_name]
-                        if values["-CONTINOUS-"]:
-                            features = [i for i in range(int(values['-BACK-'])+1)]
-                        elif values["-SELECTIVE-"]:
-                            features = []
-                            divs = values['-BACK-'].split(",")
-                            for div in divs:
-                                if isInt(div):
-                                    features.append(int(div))
-                                else:
-                                    startDiv, endDiv = div.split("-")
-                                    features += [i for i in range(int(startDiv), int(endDiv)+1)]
-                        for x in features:
-                            if x > 0:
-                                x_data[f'{var}-{x}'] = fstcol.shift(x)
+            event, params = window.read()
+            print(params)
+            if event == "Exit" or event == sg.WIN_CLOSED:
+                break
+            if event == "-EXTRA":
+                print("Extra layer")
+                
+            if event == "-GO-":
+                values['-START-'] = datetime.strptime(values['-START-'],"%d-%m-%Y")
+                values['-END-'] = datetime.strptime(values['-END-'],"%d-%m-%Y")
+                values["-FORWARD-"] = int(values["-FORWARD-"])
+                values["-STEP-"] = values["-FORWARD-"] * int(values["-STEP-"])
+                values["-ITER-"] = int(values["-ITER-"])
+                path_to_save = params["-SAVE-"]
+                x_data = pd.DataFrame()
+                max_col = 0
+                for var in values['-LIST-']:
+                    fstcol_name = data[var].columns[0]
+                    fstcol = data[var][fstcol_name]
+                    if params[f"{var}-CONTINOUS-"]:
+                        features = [i for i in range(int(params[f'{var}-BACK-'])+1)]
+                    elif params[f"{var}-SELECTIVE-"]:
+                        features = []
+                        divs = params[f'{var}-BACK-'].split(",")
+                        for div in divs:
+                            if isInt(div):
+                                features.append(int(div))
                             else:
-                                x_data[var] = fstcol
-                    print(x_data.columns)
-                    x_data.dropna(inplace=True)
-                    x_data = x_data.resample("H").last()
+                                startDiv, endDiv = div.split("-")
+                                features += [i for i in range(int(startDiv), int(endDiv)+1)]
+                    for x in features:
+                        if x > 0:
+                            x_data[f'{var}-{x}'] = fstcol.shift(x)
+                        else:
+                            x_data[var] = fstcol
+                    if max_col < max(features):
+                        max_col = max(features)
+                print(x_data.columns)
+                x_data.dropna(inplace=True)
+                x_data = x_data.resample("H").last()
+                
+                y_data = data.pop((values['-TARGET-']))
+                y_data = y_data[max_col:]
+                
+                batches = []
+                for i in range(0, values['-ITER-']):
+                    x_batch = x_data[(values['-START-']+timedelta(hours = values["-STEP-"]*i)):(values["-END-"]+timedelta(hours = values["-STEP-"]*i))][:-(values['-FORWARD-'])]
+                    y_batch = y_data[(values['-START-']+timedelta(hours = values["-STEP-"]*i)):(values["-END-"]+timedelta(hours = values["-STEP-"]*i))][values['-FORWARD-']:]
+                    batches.append((x_batch, y_batch))
+                print(list(map(lambda x: f"{x[0].shape} vs {x[1].shape}", batches)))
+        
+                for var in values['-LIST-']:
+                    params.pop(f"{var}-CONTINOUS-")
+                    params.pop(f"{var}-BACK-")
+                    params.pop(f"{var}-SELECTIVE-")
                     
-                    y_data = data.pop((values['-TARGET-']))
-                    y_data = y_data[max(features):]
-                    
-                    batches = []
-                    for i in range(0, values['-ITER-']):
-                        x_batch = x_data[(values['-START-']+timedelta(hours = values["-STEP-"]*i)):(values["-END-"]+timedelta(hours = values["-STEP-"]*i))][:-(values['-FORWARD-'])]
-                        y_batch = y_data[(values['-START-']+timedelta(hours = values["-STEP-"]*i)):(values["-END-"]+timedelta(hours = values["-STEP-"]*i))][values['-FORWARD-']:]
-                        batches.append((x_batch, y_batch))
-                    print(list(map(lambda x: f"{x[0].shape} vs {x[1].shape}", batches)))
-            
-                    res = []
-                    performances = []
-                    batch = batches[0]
-                    to_pred = batches[1][0][-(values["-STEP-"]):] 
-                    real_pred = batches[1][1][-(values["-STEP-"]):]
-                    train_matrix = xgboost.DMatrix(batch[0],batch[1])
+        
+                res = []
+                performances = []
+                batch = batches[0]
+                to_pred = batches[1][0][-(values["-STEP-"]):] 
+                real_pred = batches[1][1][-(values["-STEP-"]):]
+                train_matrix = xgboost.DMatrix(batch[0],batch[1])
+                pred_matrix = xgboost.DMatrix(to_pred, real_pred)
+                model = xgboost.train(params, train_matrix)
+                preds = model.predict(pred_matrix)
+                res.append(preds)
+                performances.append(mean_absolute_error(real_pred, preds))
+                if not os.path.exists(params["-SAVE-"]):
+                    os.mkdir(path_to_save)
+                for i in range(len(batches[:-1])):
+                    batch = batches[i]
+                    to_pred = batches[i+1][0][-(values["-STEP-"]):] 
+                    real_pred = batches[i+1][1][-(values["-STEP-"]):]
+                    train_matrix = xgboost.DMatrix(batch[0], batch[1])
                     pred_matrix = xgboost.DMatrix(to_pred, real_pred)
-                    model = xgboost.train(params, train_matrix)
+                    if values['-INCREMENTAL-']:
+                        model.save_model(os.path.join(path_to_save,f"checkpoint_{i}.model"))
+                        model = xgboost.train(params, train_matrix, xgb_model=model)
+                    else:
+                        model.save_model(os.path.join(path_to_save,f"checkpoint.model"))
+                        model = xgboost.train(params, train_matrix)
                     preds = model.predict(pred_matrix)
                     res.append(preds)
                     performances.append(mean_absolute_error(real_pred, preds))
-                    if not os.path.exists(params["-SAVE-"]):
-                        os.mkdir(path_to_save)
-                    for i in range(len(batches[:-1])):
-                        batch = batches[i]
-                        to_pred = batches[i+1][0][-(values["-STEP-"]):] 
-                        real_pred = batches[i+1][1][-(values["-STEP-"]):]
-                        train_matrix = xgboost.DMatrix(batch[0], batch[1])
-                        pred_matrix = xgboost.DMatrix(to_pred, real_pred)
-                        if values['-INCREMENTAL-']:
-                            model.save_model(os.path.join(path_to_save,f"checkpoint_{i}.model"))
-                            model = xgboost.train(params, train_matrix, xgb_model=model)
-                        else:
-                            model.save_model(os.path.join(path_to_save,f"checkpoint.model"))
-                            model = xgboost.train(params, train_matrix)
-                        preds = model.predict(pred_matrix)
-                        res.append(preds)
-                        performances.append(mean_absolute_error(real_pred, preds))
-                    print(f"Performance {np.mean(performances)}")
-                    break
-                    
+                print(f"Performance {np.mean(performances)}")
+                break
+                
     if values["-SVM-"]:
         gamma = "scale"
         errors = {
@@ -247,7 +270,7 @@ def choose_params(values, data, path):
         }
         kernel = ["linear", "poly", "rbf", "sigmoid", "precomputed"]
         gammas = ['scale', 'auto', "Numerico"]
-        layout = [[sg.Text("Kernel"), sg.Combo(kernel,default_value="rbf", enable_events=True, key="objective")],
+        right = [[sg.Text("Kernel"), sg.Combo(kernel,default_value="rbf", enable_events=True, key="objective")],
                   [sg.Text("Grado (kernel polinomial)"), sg.Input("3", enable_events=True, key='degree')],
                   [sg.Text("Gamma"), sg.Combo(gammas,default_value="scale", enable_events=True, key="-GAMMA-TYPE-")],
                   [sg.Text("Valor para Gamma"), sg.Input(0, disabled=True, key='-GAMMA-NUM-', enable_events=True, background_color='#3A3A3A')],
@@ -258,6 +281,8 @@ def choose_params(values, data, path):
                   [sg.Check("Shrinking", key='shrinking', default=True)],
                   [sg.Input(r"C:\Users\tomasdfen\Downloads\test",key="-SAVE-",enable_events=True), sg.FolderBrowse()],
                   [sg.Button("OK", key="-GO-")]] 
+        layout = [[sg.Column(left), sg.VSeparator(), sg.Column(right)]]
+
         window = sg.Window("Selección de parámetros: XGBoost", layout, modal=True, size=(None, None))
         while True:
                 event, params = window.read()

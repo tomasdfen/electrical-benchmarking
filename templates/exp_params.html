@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block header %}Selecciona los parametros de experimentación{% endblock header %}
+
+{% block body %}
+<div class="position-relative m-4">
+    <div class="progress" style="height: 1px;">
+        <div class="progress-bar" role="progressbar" style="width: 50%;" aria-valuenow="0" aria-valuemin="0"
+            aria-valuemax="100"></div>
+    </div>
+    <a class="position-absolute top-0 start-0 translate-middle btn btn-sm btn-primary rounded-pill" href="/"
+        style="width: 2rem; height:2rem;">1</a>
+    <button type="button" class="position-absolute top-0 start-50 translate-middle btn btn-sm btn-primary rounded-pill"
+        style="width: 2rem; height:2rem;">2</button>
+    <button type="button"
+        class="position-absolute top-0 start-100 translate-middle btn btn-sm btn-secondary rounded-pill"
+        style="width: 2rem; height:2rem;">3</button>
+</div>
+<form action="submit_params" id="params" enctype=multipart/form-data method="POST" onsubmit="return validate()">
+    <div class="row mb-3">
+        <div class="col">
+            <label class="form-label" for="start">Fecha de inicio</label>
+            <input type="date" class="form-control" name="start" id="start" value="2020-06-01" required>
+        </div>
+        <div class="col">
+            <label class="form-label" for="end">Fecha de fin</label>
+            <input type="date" class="form-control mb-2" name="end" id="end" value="2021-06-01" required>
+
+            <label for="end-type">Tipo de fecha de fin: </label>
+            <label for="end-date" class="form-check-label">Fecha</label>
+            <input type="radio" checked class="form-check-input" name="end-type" id="end-type" value="Fecha"
+                onclick="$('#end')[0].type = 'date'">
+            <label for="end-percentage" class="form-check-label">Porcentaje</label>
+            <input type="radio" class="form-check-input" disabled name="end-type" id="end-percentage" value="Porcentaje"
+                onclick="$('#end')[0].type = 'number'">
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col">
+            <label for="forward">Horizonte de predicción</label>
+            <input type="number" class="form-control" name="forward" id="forward" value=6 required>
+        </div>
+
+        <div class="col">
+            <label for="step">Multiplicador de avance</label>
+            <input type="number" class="form-control" name="step" id="step" value=8 required>
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col">
+            <label for="models">Modelos: </label>
+            <label for="end-date" class="form-check-label">XGboost</label>
+            <input type="checkbox" class="form-check-input" name="xgboost" id="XGboost" checked value="XGboost">
+            <label for="end-percentage" class="form-check-label">SVM</label>
+            <input type="checkbox" class="form-check-input" name="svm" id="SVM" value="SVM">
+        </div>
+        <div class="col">
+            <div class="row">
+                <div class="col">
+                    <label for="incremental" class="form-check-label">Aprendizaje incremental</label>
+                    <input type="checkbox" class="form-check-input" name="incremental" id="incremental" value="incremental">
+                </div>
+                <div class="col">
+                    <label for="savemodel" class="form-check-label">Guardar modelos</label>
+                    <input type="checkbox" class="form-check-input" name="savemodel" id="savemodel" value="savemodel">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col">
+            <label class="form-label" for="target">Variable objetivo</label>
+            <select class="form-select col" name="target" id="target">
+                {% for column in variables %}
+                <option value="{{column}}">{{column}}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+    </div>
+    <hr class="bg-primary border-2 border-top border-primary">
+    <div id="features">
+        <button type="button" class="btn btn-primary mb-2" onclick="addrow({{variables}})">Añadir variable</button>
+        <button type="button" class="btn btn-primary mb-2" onclick="removerow()">Eliminar variable</button>
+        <input type="submit" class="btn btn-primary mb-2" id="submitBtn" form="params" value="Parámetros de entrenamiento">
+    </div>
+</form>
+
+{% endblock body %}
