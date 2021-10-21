@@ -1,5 +1,6 @@
 test.ipynb
 checkpoint.model
-static
+static/*
 cache
 main.py
+!static/main.js

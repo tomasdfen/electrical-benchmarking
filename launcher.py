@@ -12,6 +12,7 @@ from sklearn.svm import SVR
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from datetime import datetime, timedelta
+plt.rcParams["figure.figsize"] = (8,5)
 while True:
     try:
         from flask import Flask, render_template, request, redirect, session
@@ -35,7 +36,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__, template_folder="templates")
 if not os.path.exists("cache"):
-    os.mkdir("cache")
+    os.makedirs("cache")
     
 app.config['UPLOAD_FOLDER'] = "cache"
 
@@ -149,6 +150,7 @@ def train(model_code):
     x_data = pd.DataFrame()
     max_col = 0
     for i,var in enumerate(cache.get("selectedvars")):
+        var_df = pd.DataFrame()
         fstcol_name = data[var].columns[0]
         fstcol = data[var][fstcol_name]
         if cache.get("backtypes")[i] == "continous":
@@ -164,24 +166,41 @@ def train(model_code):
                     features += [i for i in range(int(startDiv), int(endDiv)+1)]
         for x in features:
             if x > 0:
-                x_data[f'{var}-{x}'] = fstcol.shift(x)
+                var_df[f'{var}-{x}'] = fstcol.shift(x)
             else:
-                x_data[var] = fstcol
-        if max_col < max(features):
-            max_col = max(features)
-    
+                var_df[var] = fstcol
+
+        if cache.get("transformations")[i] == "median":
+            x_data[f"{var}-{cache.get('backs')[i]}-median"] = var_df.median(axis=1)
+            if max_col < 1:
+                max_col = 1 
+        elif cache.get("transformations")[i] == "mean":
+            x_data[f"{var}-{cache.get('backs')[i]}-mean"] = var_df.mean(axis=1)
+            if max_col < 1:
+                max_col = 1 
+        else:
+            x_data = pd.concat([x_data, var_df], axis=1)
+            if max_col < max(features):
+                max_col = max(features)            
     x_data.dropna(inplace=True)
     x_data = x_data.resample("H").last()
-    
+    x_data = x_data.loc[:,~x_data.columns.duplicated()]
+
     y_data = data[(cache.get("target"))]
     y_data = y_data[max_col:]
     
     batches = []
-    
-    for i in range(0, 15):
-        x_batch = x_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][:-(cache.get("forward"))]
-        y_batch = y_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][cache.get("forward"):]
-        batches.append((x_batch, y_batch))
+    if cache.get("incremental"):    
+        for i in range(0, 16):
+            x_batch = x_data[:(cache.get("end")+timedelta(hours = cache.get("step")*i))][:-(cache.get("forward"))]
+            y_batch = y_data[:(cache.get("end")+timedelta(hours = cache.get("step")*i))][cache.get("forward"):]
+            batches.append((x_batch, y_batch))
+    else:
+        for i in range(0, 16):
+            x_batch = x_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][:-(cache.get("forward"))]
+            y_batch = y_data[(cache.get("start")+timedelta(hours = cache.get("step")*i)):(cache.get("end")+timedelta(hours = cache.get("step")*i))][cache.get("forward"):]
+            batches.append((x_batch, y_batch))
+    print(list(map(lambda x: f"{x[0].shape} vs {x[1].shape}", batches)))
 
     for model_id in model_code.split("_"):
         res = []
@@ -191,7 +210,7 @@ def train(model_code):
         performances_mse = []
         model_path = os.path.join("static",str(datetime.today().date()),model_id)
         if not os.path.exists(model_path):
-            os.mkdir(model_path)
+            os.makedirs(model_path)
             
         if "xgboost" == model_id:
             params["objective"] = request.form.get("objective")
@@ -206,18 +225,25 @@ def train(model_code):
             model = xgboost.train(params, train_matrix)
             preds = model.predict(pred_matrix)
             res.append(preds)
+
             performances_mae.append(mean_absolute_error(real_pred, preds))
             performances_mse.append(mean_squared_error(real_pred, preds))
+            plt.plot(real_pred.index, real_pred, label="Datos reales")
+            plt.plot(real_pred.index,preds, label="Predcciones")
+            plt.legend(loc="upper left")
+            plt.savefig(os.path.join(model_path,f"{i}.svg"))
+            img_paths.append(os.path.join(model_path,f"{i}.svg"))
+            plt.clf()
 
-            
-            for i in range(len(batches[1:])):
+            for i in range(1,len(batches)-1):
                 batch = batches[i]
+                print(batch[0].index)
                 to_pred = batches[i+1][0][-(cache.get("step")):] 
                 real_pred = batches[i+1][1][-(cache.get("step")):]
                 
                 train_matrix = xgboost.DMatrix(batch[0], batch[1])
                 pred_matrix = xgboost.DMatrix(to_pred, real_pred)
-                if cache.get("incremental"):
+                if cache.get("savemodel"):
                     model.save_model(os.path.join(model_path, f"checkpoint_{i}.model"))
                     model = xgboost.train(params, train_matrix, xgb_model=model)
                 else:
@@ -227,15 +253,16 @@ def train(model_code):
                 performances_mae.append(mean_absolute_error(real_pred, preds))
                 performances_mse.append(mean_squared_error(real_pred, preds))
                 
-                plt.plot(real_pred.index, real_pred)
-                plt.plot(real_pred.index,preds)
-                plt.savefig(os.path.join(model_path,f"{i}.png"))
-                img_paths.append(os.path.join(model_path,f"{i}.png"))
+                plt.plot(real_pred.index, real_pred, label="Datos reales")
+                plt.plot(real_pred.index,preds, label="Predcciones")
+                plt.legend(loc="upper left")
+                plt.savefig(os.path.join(model_path,f"{i}.svg"))
+                img_paths.append(os.path.join(model_path,f"{i}.svg"))
                 plt.clf()
         
         elif "svm" == model_id:
             model = SVR()
-            for i in range(len(batches[:-1])):
+            for i in range(len(batches)):
                 batch = batches[i]
                 to_pred = batches[i+1][0][-(cache.get("step")):] 
                 real_pred = batches[i+1][1][-(cache.get("step")):]
@@ -245,10 +272,11 @@ def train(model_code):
                 performances_mae.append(mean_absolute_error(real_pred, preds))
                 performances_mse.append(mean_squared_error(real_pred, preds))
                 
-                plt.plot(real_pred.index, real_pred)
-                plt.plot(real_pred.index,preds)
-                plt.savefig(os.path.join(model_path,f"{i}.png"))
-                img_paths.append(os.path.join(model_path,f"{i}.png"))
+                plt.plot(real_pred.index, real_pred, label="Datos reales")
+                plt.plot(real_pred.index,preds, label="Predcciones")
+                plt.legend(loc="upper left")
+                plt.savefig(os.path.join(model_path,f"{i}.svg"))
+                img_paths.append(os.path.join(model_path,f"{i}.svg"))
                 plt.clf()
                 
             with open(os.path.join(model_path, "checkpoint.model"), 'wb') as f:
@@ -274,8 +302,12 @@ def results():
         keys.append(f"params_{model_id}")
         keys.append(f"preds_{model_id}")
     d = cache.get_dict(*keys)
-
-    return render_template("results.html",model_code = m_code, **d)
+    r = make_response(render_template("results.html",model_code = m_code, **d ))
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    r.headers['Cache-Control'] = 'public, max-age=0'
+    return r
     
 @app.route("/downloadPerformance/<model>")
 def downloadPerformance(model):
@@ -292,7 +324,11 @@ def downloadPerformance(model):
             f.write(f"Rendimiento por iteración (MAE):\n")
             for i,p in enumerate(cache.get(f"performance_mae_{model}")):
                 f.write(f"\t{i} - {p}\n")
-    return path
+    r = make_response(path)
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
     
 
 @app.route("/downloadPreds/<model>")
@@ -302,6 +338,8 @@ def downloadPreds(model):
     aux.to_csv(path, index=False)
     r = make_response(path)
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
     return r
         
 # @app.errorhandler(Exception)
@@ -310,6 +348,6 @@ def downloadPreds(model):
 
 if __name__ == '__main__':
     #Timer(1, open_web_browser).start()
-    app.run(host="localhost", port=5500)
+    app.run(host="localhost", port=5500, debug=False)
     
     
