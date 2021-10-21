@@ -342,12 +342,12 @@ def downloadPreds(model):
     r.headers["Expires"] = "0"
     return r
         
-# @app.errorhandler(Exception)
-# def handle_exception(e):
-#     return render_template("index.html", error=f"Ocurrio un error: {e}") 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return render_template("index.html", error=f"Ocurrio un error: {e}") 
 
 if __name__ == '__main__':
-    #Timer(1, open_web_browser).start()
+    Timer(1, open_web_browser).start()
     app.run(host="localhost", port=5500, debug=False)
     
     
